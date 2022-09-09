@@ -3,7 +3,13 @@ name = "load-balancer"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies.tokio]
+version = "1.21.0"
+features = ["full"]
+
+[dependencies.hyper]
+version = "0.14.20"
+features = ["server", "http1", "tcp", "client"]
 
 [dependencies.clap]
 version = "3.2.20"
