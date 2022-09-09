@@ -1,21 +1,18 @@
-use std::borrow::BorrowMut;
 use std::convert::Infallible;
-use std::f32::consts::E;
 use std::net::SocketAddr;
 use std::collections::LinkedList;
 use std::sync::Arc;
 use clap::{Command, Arg};
-use hyper::client::{conn, connect};
-use hyper::header::HOST;
 use hyper::http::{HeaderValue, request};
 use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn, Service};
-use hyper::{Body, Request, Response, Client, Method};
+use hyper::{Body, Request, Response, Client, Method, Uri};
 use hyper::server::Server;
+use hyper_tls::HttpsConnector;
 use tokio::sync::Mutex;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Infallible> {
     let matches = Command::new("Load Balancer")
         .arg(Arg::new("server")
             .short('s')
@@ -43,7 +40,6 @@ async fn main() {
     let available_servers = Arc::new(Mutex::new(available_servers));
 
     let make_service = make_service_fn(move |conn: &AddrStream| {
-
         let available_servers = available_servers.clone();
 
         let service = service_fn(move |mut request| {
@@ -59,22 +55,26 @@ async fn main() {
     if let Err(e) = server.await {
         eprintln!("server error: {}", e)
     }
+
+    Ok(())
 }
 
 // TODO: Treat all those fucked up unwraps
 async fn forward_request(request: Request<Body>, available_servers: Arc<Mutex<LinkedList<SocketAddr>>>) -> Result<Response<Body>, Infallible> {
-    let client = Client::new();
+    let https = HttpsConnector::new();
+    let client = Client::builder().build::<_, hyper::Body>(https);
 
     let mut available_servers = available_servers.lock().await;
 
     let server = available_servers.pop_front().unwrap();
 
     let request = Request::builder()
-        .uri(dbg!(server.to_string()))
         .method(request.method())
+        .uri("https://www.google.com/")
+        .header("content-type", "text/html; charset=UTF-8")
         .body(Body::from("pog")).unwrap();
 
-    let response = client.request(request).await;
+    let response = client.request(dbg!(request)).await;
 
     available_servers.push_back(server);
 
