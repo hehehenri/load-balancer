@@ -79,16 +79,16 @@ async fn forward_request(request: Request<Body>, available_servers: Arc<Mutex<Li
     let mut available_servers = available_servers.lock().await;
 
     let server_address = available_servers.pop_front().unwrap();
+    available_servers.push_back(server_address.clone());
+
+    println!("Forwarding request: {:?} -> {}", &request.headers().get("host").unwrap(), &server_address);
 
     let (mut parts, body) = request.into_parts();
 
     parts.uri = server_address.clone();
 
-    let mut new_request = Request::from_parts(parts, body);
-
-    let mut response = client.request(new_request).await;
-
-    available_servers.push_back(server_address);
+    let mut request = Request::from_parts(parts, body);
+    let mut response = client.request(request).await;
 
     match response {
         Ok(response) => Ok(response),
