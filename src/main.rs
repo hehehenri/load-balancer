@@ -11,21 +11,41 @@ use hyper::server::Server;
 use hyper_tls::HttpsConnector;
 use tokio::sync::Mutex;
 
+#[derive(Clone)]
+struct AppContext {
+    available_servers: Arc<Mutex<LinkedList<Uri>>>,
+    host: SocketAddr,
+}
+
+impl AppContext {
+    pub fn from_args(args: (SocketAddr, Arc<Mutex<LinkedList<Uri>>>)) -> Self {
+        let (host, available_servers) = args;
+        Self {
+            available_servers,
+            host,
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Infallible> {
-    let (bind_address, available_servers) = parse_args();
+    let args = parse_args();
+
+    let app_context = AppContext::from_args(args);
+
+    let host = app_context.host;
 
     let make_service = make_service_fn(move |_: &AddrStream| {
-        let available_servers = available_servers.clone();
+        let app_context = app_context.clone();
 
         let service = service_fn(move |request| {
-            forward_request(request, available_servers.clone())
+            forward_request(request, app_context.clone())
         });
 
         async move { Ok::<_, Infallible>(service) }
     });
 
-    let server = Server::bind(&bind_address)
+    let server = Server::bind(&host)
         .serve(make_service);
 
     if let Err(e) = server.await {
@@ -72,11 +92,11 @@ fn parse_args() -> (SocketAddr, Arc<Mutex<LinkedList<Uri>>>) {
 }
 
 #[allow(unused)]
-async fn forward_request(request: Request<Body>, available_servers: Arc<Mutex<LinkedList<Uri>>>) -> Result<Response<Body>, Infallible> {
+async fn forward_request(request: Request<Body>, app_context: AppContext) -> Result<Response<Body>, Infallible> {
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, hyper::Body>(https);
 
-    let mut available_servers = available_servers.lock().await;
+    let mut available_servers = app_context.available_servers.lock().await;
 
     let server_address = available_servers.pop_front().unwrap();
     available_servers.push_back(server_address.clone());
